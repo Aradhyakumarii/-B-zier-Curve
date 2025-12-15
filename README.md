@@ -7,6 +7,7 @@ This project shows an interactive cubic Bézier curve created using only HTML, C
 The curve is calculated manually using mathematical formulas instead of built-in functions. Two control points are attached to a small physics system that behaves like a spring, so the curve follows the mouse smoothly with a slight delay and bounce. This makes the movement look natural instead of rigid.
 
 Overall, the project helps in understanding how Bézier curves work, how simple physics can be used for smooth motion, and how interactive graphics can be built using basic web technologies.
+## Demo Video : https://drive.google.com/file/d/1v2L8XtgQzho1BUcsHrTy7OYEKfk0u1Du/view?usp=sharing
 <img width="1781" height="651" alt="image" src="https://github.com/user-attachments/assets/03d9ecc1-6459-4c71-b0e2-4559decb0986" />
 
 
