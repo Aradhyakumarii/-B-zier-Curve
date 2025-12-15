@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment - Aradhya Kumari</title>
+    <style>
+        /* Basic Reset & Dark Theme 
+           Using a dark background to make the neon lines pop.
+           I have explained al the step as required.
+        */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #e3dada;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden; /* Hide scrollbars */
+        }
+        
+        #renderArea1 {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* Overlay for student details - pinned to top left */
+        .student-header1 {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(246, 245, 245, 0.7);
+            padding: 15px;
+            border: 1px solid #444;
+            pointer-events: none; /* Let clicks pass through to canvas */
+            user-select: none;
+        }
+
+        .header-title1 {
+            font-size: 18px;
+            font-weight: bold;
+            color: #000000;
+            margin-bottom: 5px;
+        }
+
+        .header-name1 {
+            font-size: 16px;
+            color: #060606;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="student-header1">
+        <div class="header-title1">Assignment</div>
+        <div class="header-name1">Name: Aradhya kumari</div>
+    </div>
+
+    <canvas id="renderArea1"></canvas>
+
+<script>
+/* 
+   HELPER CLASS: VECTORS
+   JS doesn't have native vector math, so I created 
+   this helper to handle x/y operations easily.
+ */
+
+class CoordType1 {
+    constructor(valX1, valY1) {
+        this.x1 = valX1;
+        this.y1 = valY1;
+    }
+
+    addVec1(vInput1) {
+        return new CoordType1(this.x1 + vInput1.x1, this.y1 + vInput1.y1);
+    }
+
+    subVec1(vInput1) {
+        return new CoordType1(this.x1 - vInput1.x1, this.y1 - vInput1.y1);
+    }
+
+    multVec1(scalar1) {
+        return new CoordType1(this.x1 * scalar1, this.y1 * scalar1);
+    }
+
+    // Pythagorean theorem for length
+    getMag1() {
+        return Math.sqrt(this.x1 * this.x1 + this.y1 * this.y1);
+    }
+
+    // Convert to unit vector (direction only)
+    normVec1() {
+        const len1 = this.getMag1();
+        // Prevent divide by zero errors
+        return len1 === 0 ? new CoordType1(0,0) : this.multVec1(1 / len1);
+    }
+}
+
+/* =========================================
+   PHYSICS LOGIC
+   Instead of the points instantly snapping to the mouse,
+   I used a spring model (tension + drag) to make it feel smooth.
+========================================= */
+
+class ElasticPoint2 {
+    constructor(initX2, initY2) {
+        this.loc2 = new CoordType1(initX2, initY2);  // Current position
+        this.dest2 = new CoordType1(initX2, initY2); // Target position (mouse)
+        this.spd2 = new CoordType1(0, 0);            // Velocity
+        
+        // Tweaked these values to get the right amount of "lag"
+        this.tension2 = 0.08; // How hard it pulls to the target
+        this.drag2 = 0.85;    // Air resistance (prevents endless wobbling)
+    }
+
+    updatePhysics2() {
+        // Calculate distance to target
+        const dist2 = this.dest2.subVec1(this.loc2);
+        
+        // Apply Hooke's Law (Spring force)
+        const force2 = dist2.multVec1(this.tension2);
+
+        // Update velocity and position
+        this.spd2 = this.spd2.addVec1(force2);
+        this.spd2 = this.spd2.multVec1(this.drag2); // Apply friction
+        this.loc2 = this.loc2.addVec1(this.spd2);
+    }
+}
+
+
+// MATH: BEZIER CURVES
+
+// Standard Cubic Bezier formula: B(t) = (1-t)^3*P0 + 3(1-t)^2*t*P1 ...
+function calcBezierPos1(tm1, pA1, pB1, pC1, pD1) {
+    const invT1 = 1 - tm1;
+    const invTSq1 = invT1 * invT1;
+    const tSq1 = tm1 * tm1;
+
+    // Broken down into 4 terms for readability
+    const term1 = pA1.multVec1(invTSq1 * invT1);
+    const term2 = pB1.multVec1(3 * invTSq1 * tm1);
+    const term3 = pC1.multVec1(3 * invT1 * tSq1);
+    const term4 = pD1.multVec1(tSq1 * tm1);
+
+    // Sum them up to get the final point
+    return term1.addVec1(term2).addVec1(term3).addVec1(term4);
+}
+
+// Calculates the derivative (tangent) at time t.
+// Used for drawing the little red direction lines.
+function calcTangentDir1(tm1, pA1, pB1, pC1, pD1) {
+    const invT1 = 1 - tm1;
+    
+    // Derived formula for cubic bezier tangents
+    const d1 = pB1.subVec1(pA1).multVec1(3 * invT1 * invT1);
+    const d2 = pC1.subVec1(pB1).multVec1(6 * invT1 * tm1);
+    const d3 = pD1.subVec1(pC1).multVec1(3 * tm1 * tm1);
+
+    const totalD = d1.addVec1(d2).addVec1(d3);
+    return totalD.normVec1();
+}
+
+/* =========================================
+   MAIN APP SETUP
+========================================= */
+
+let canvasRef1, paintCtx1;
+let dispW1, dispH1;
+let staticNode1, staticNode2; // The fixed start/end points
+let activeNode1, activeNode2; // The moving control points
+
+function initApp1() {
+    canvasRef1 = document.getElementById("renderArea1");
+    if(!canvasRef1) {
+        console.error("Canvas not found!"); 
+        return;
+    }
+    
+    paintCtx1 = canvasRef1.getContext("2d");
+    
+    // Handle initial sizing
+    handleResize1();
+    
+    // Event listeners
+    window.addEventListener("resize", handleResize1);
+    window.addEventListener("mousemove", handleInput1);
+    
+    // Kick off the animation loop
+    animLoop1();
+}
+
+// Recalculate positions if the user resizes the browser
+function handleResize1() {
+    dispW1 = window.innerWidth;
+    dispH1 = window.innerHeight;
+    canvasRef1.width = dispW1;
+    canvasRef1.height = dispH1;
+
+    const midH = dispH1 * 0.5;
+    
+    // Anchor points stay at 15% and 85% width
+    staticNode1 = new CoordType1(dispW1 * 0.15, midH);
+    staticNode2 = new CoordType1(dispW1 * 0.85, midH);
+
+    // Only create physics nodes if they don't exist yet
+    // (We don't want to reset their physics state on resize)
+    if(!activeNode1) activeNode1 = new ElasticPoint2(dispW1 * 0.35, midH);
+    if(!activeNode2) activeNode2 = new ElasticPoint2(dispW1 * 0.65, midH);
+}
+
+// Maps mouse X position to the control point targets
+function handleInput1(evt1) {
+    if(!activeNode1 || !activeNode2) return;
+    
+    const mouseX = evt1.clientX;
+    const mouseY = evt1.clientY;
+
+    // Offset the targets so the curve doesn't collapse on itself
+    activeNode1.dest2 = new CoordType1(mouseX - 120, mouseY);
+    activeNode2.dest2 = new CoordType1(mouseX + 120, mouseY);
+}
+
+// The main render loop
+function drawScene1() {
+    // Clear screen for next frame
+    paintCtx1.clearRect(0, 0, dispW1, dispH1);
+
+    // 1. Step the physics simulation forward
+    activeNode1.updatePhysics2();
+    activeNode2.updatePhysics2();
+
+    // 2. Draw the main blue curve
+    paintCtx1.beginPath();
+    paintCtx1.moveTo(staticNode1.x1, staticNode1.y1);
+
+    // Sample 100 points along the curve for smoothness
+    const steps1 = 100;
+    for (let i = 0; i <= steps1; i++) {
+        const tVal = i / steps1;
+        const pt = calcBezierPos1(
+            tVal, 
+            staticNode1, 
+            activeNode1.loc2, 
+            activeNode2.loc2, 
+            staticNode2
+        );
+        paintCtx1.lineTo(pt.x1, pt.y1);
+    }
+    
+    paintCtx1.strokeStyle = "#00ffcc";
+    paintCtx1.lineWidth = 3;
+    paintCtx1.stroke();
+
+    // 3. Draw Tangents (The red lines)
+    // I only draw a few of these to avoid clutter
+    paintCtx1.strokeStyle = "#ff4466";
+    paintCtx1.lineWidth = 1;
+
+    const tanSteps = 12;
+    for (let j = 0; j <= tanSteps; j++) {
+        const tVal = j / tanSteps;
+        const origin = calcBezierPos1(tVal, staticNode1, activeNode1.loc2, activeNode2.loc2, staticNode2);
+        const dir = calcTangentDir1(tVal, staticNode1, activeNode1.loc2, activeNode2.loc2, staticNode2);
+        
+        paintCtx1.beginPath();
+        paintCtx1.moveTo(origin.x1, origin.y1);
+        paintCtx1.lineTo(origin.x1 + dir.x1 * 30, origin.y1 + dir.y1 * 30);
+        paintCtx1.stroke();
+    }
+
+    // 4. Draw the control handles (White dots)
+    paintCtx1.fillStyle = "#ffffff";
+    [activeNode1, activeNode2].forEach(node => {
+        paintCtx1.beginPath();
+        paintCtx1.arc(node.loc2.x1, node.loc2.y1, 4, 0, Math.PI * 2);
+        paintCtx1.fill();
+    });
+
+    // 5. Draw Labels (P0, P1, P2, P3)
+    paintCtx1.font = "bold 16px monospace";
+    paintCtx1.fillText("P₀", staticNode1.x1 - 30, staticNode1.y1); // P0
+    paintCtx1.fillText("P₃", staticNode2.x1 + 15, staticNode2.y1); // P3
+    paintCtx1.fillText("P₁", activeNode1.loc2.x1 - 10, activeNode1.loc2.y1 - 15); // P1
+    paintCtx1.fillText("P₂", activeNode2.loc2.x1 - 10, activeNode2.loc2.y1 - 15); // P2
+}
+
+function animLoop1() {
+    drawScene1();
+    requestAnimationFrame(animLoop1);
+}
+
+// Wait for page load before running scripts
+window.addEventListener("load", initApp1);
+
+</script>
+</body>
+</html>
